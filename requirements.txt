@@ -1,0 +1,18 @@
+# --- PHẦN 1: Web Framework (Backend API) ---
+fastapi==0.110.0          # Framework tạo API siêu tốc độ
+uvicorn[standard]==0.29.0 # Server ASGI để chạy FastAPI
+python-multipart==0.0.9   # Bắt buộc phải có để nhận file âm thanh (UploadFile) từ React
+
+# --- PHẦN 2: Xử lý Âm thanh (Audio Processing) ---
+librosa==0.10.1           # Dùng để ép tần số âm thanh về chuẩn 16kHz
+soundfile==0.12.1         # Dùng để đọc/ghi file .wav nhanh chóng
+pydub==0.25.1             # Xử lý các thao tác cắt/ghép âm thanh (nếu cần)
+
+# --- PHẦN 3: Đánh giá Đồ án (Kịch bản Test) ---
+jiwer==3.0.3              # Tính tỷ lệ lỗi từ WER (Word Error Rate)
+psutil==5.9.8             # Giám sát RAM, CPU khi AI chạy
+
+# --- PHẦN 4: Lõi AI (NVIDIA NeMo & PyTorch) ---
+# LƯU Ý: Không ghi trực tiếp PyTorch và NeMo vào file này!
+
+# -- các phần khác
