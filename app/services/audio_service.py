@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 
@@ -31,6 +32,23 @@ async def process_audio_file(upload_file: UploadFile) -> str:
     finally:
         if os.path.exists(raw_path):
             os.remove(raw_path)
+
+
+async def process_audio_chunk(audio_bytes: UploadFile) -> str:
+    """Xử lý chunk audio real-time: đọc từ RAM, convert 16kHz mono, lưu file tạm cho NeMo"""
+    bytes_data = await audio_bytes.read()
+
+    audio = AudioSegment.from_file(io.BytesIO(bytes_data))
+    audio = audio.set_channels(1)
+    audio = audio.set_frame_rate(16000)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_path = tmp.name
+    audio.export(tmp_path, format="wav")
+    tmp.close()
+
+    return tmp_path
+
 
 def cleanup_temp_file(file_path: str):
     """Xóa file tạm sau khi đã sử dụng xong"""

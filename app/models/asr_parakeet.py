@@ -97,3 +97,12 @@ def transcribe(file_path: str) -> str:
         for p in chunk_paths:
             if os.path.exists(p):
                 os.remove(p)
+
+
+def transcribe_chunk(file_path: str) -> str:
+    model = load_model()
+    raw_results = model.transcribe([file_path])
+
+    if raw_results and raw_results[0] is not None:
+        return raw_results[0].strip()
+    return ""
