@@ -4,11 +4,18 @@ import tempfile
 
 
 from fastapi import UploadFile
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 
 # CHỈ ĐIỂM ĐÍCH DANH CHO MÁY MAC M4:
 AudioSegment.converter = "/opt/homebrew/bin/ffmpeg"
 AudioSegment.ffprobe   = "/opt/homebrew/bin/ffprobe"
+
+PADDING_MS = 400
+
+
+def apply_silence_padding(audio: AudioSegment, padding_duration_ms: int = PADDING_MS) -> AudioSegment:
+    silence = AudioSegment.silent(duration=padding_duration_ms, frame_rate=audio.frame_rate)
+    return silence + audio + silence
 
 async def process_audio_file(upload_file: UploadFile) -> str:
     """Xử lý file âm thanh thô thành file .wav chuẩn 16kHz cho Parakeet"""
@@ -26,7 +33,9 @@ async def process_audio_file(upload_file: UploadFile) -> str:
         audio = AudioSegment.from_file(raw_path)
         audio = audio.set_channels(1)
         audio = audio.set_frame_rate(16000)
-        audio.export(clean_wav_path, format="wav")
+        audio = effects.normalize(audio)
+        audio = audio.set_sample_width(2)
+        audio.export(clean_wav_path, format="wav", codec="pcm_s16le")
         return clean_wav_path
 
     finally:
@@ -35,16 +44,19 @@ async def process_audio_file(upload_file: UploadFile) -> str:
 
 
 async def process_audio_chunk(audio_bytes: UploadFile) -> str:
-    """Xử lý chunk audio real-time: đọc từ RAM, convert 16kHz mono, lưu file tạm cho NeMo"""
+    """Xử lý chunk audio real-time: padding silence, convert 16kHz mono, lưu file tạm"""
     bytes_data = await audio_bytes.read()
 
     audio = AudioSegment.from_file(io.BytesIO(bytes_data))
     audio = audio.set_channels(1)
     audio = audio.set_frame_rate(16000)
+    audio = effects.normalize(audio)
+    audio = audio.set_sample_width(2)
+    audio = apply_silence_padding(audio)
 
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     tmp_path = tmp.name
-    audio.export(tmp_path, format="wav")
+    audio.export(tmp_path, format="wav", codec="pcm_s16le")
     tmp.close()
 
     return tmp_path
