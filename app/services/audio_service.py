@@ -1,21 +1,52 @@
 import io
 import os
+import shutil
+import sys
 import tempfile
 
-
 from fastapi import UploadFile
+from loguru import logger
 from pydub import AudioSegment, effects
 
-# CHỈ ĐIỂM ĐÍCH DANH CHO MÁY MAC M4:
-AudioSegment.converter = "/opt/homebrew/bin/ffmpeg"
-AudioSegment.ffprobe   = "/opt/homebrew/bin/ffprobe"
-
 PADDING_MS = 400
+
+# Windows / Linux: dùng ffmpeg trên PATH.
+# macOS: fallback Homebrew nếu chưa có trong PATH.
+def _configure_ffmpeg() -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+
+    if not ffmpeg and sys.platform == "darwin":
+        for candidate in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"):
+            if os.path.isfile(candidate):
+                ffmpeg = candidate
+                break
+
+    if not ffprobe and sys.platform == "darwin":
+        for candidate in ("/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe"):
+            if os.path.isfile(candidate):
+                ffprobe = candidate
+                break
+
+    if ffmpeg:
+        AudioSegment.converter = ffmpeg
+    else:
+        logger.warning(
+            "ffmpeg not found on PATH. Install ffmpeg and add it to PATH "
+            "(Windows: winget install Gyan.FFmpeg)."
+        )
+
+    if ffprobe:
+        AudioSegment.ffprobe = ffprobe
+
+
+_configure_ffmpeg()
 
 
 def apply_silence_padding(audio: AudioSegment, padding_duration_ms: int = PADDING_MS) -> AudioSegment:
     silence = AudioSegment.silent(duration=padding_duration_ms, frame_rate=audio.frame_rate)
     return silence + audio + silence
+
 
 async def process_audio_file(upload_file: UploadFile) -> str:
     """Xử lý file âm thanh thô thành file .wav chuẩn 16kHz cho Parakeet"""

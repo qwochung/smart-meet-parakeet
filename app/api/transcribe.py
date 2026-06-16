@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 from typing import Optional
@@ -10,14 +11,18 @@ router = APIRouter(
     tags=["Transcription"]
 )
 
+_transcribe_lock = asyncio.Lock()
+
+
 @router.post("")
 async def transcribe_meeting_audio(audio_file: UploadFile = File(...)):
     start_time = time.time()
     clean_wav_path = ""
 
     try:
-        clean_wav_path = await process_audio_file(audio_file)
-        result = transcribe(clean_wav_path)
+        async with _transcribe_lock:
+            clean_wav_path = await process_audio_file(audio_file)
+            result = await asyncio.to_thread(transcribe, clean_wav_path)
         process_time = round(time.time() - start_time, 2)
 
         return {
@@ -43,14 +48,13 @@ async def transcribe_audio_chunk(
 ):
     wav_path = None
     try:
-        wav_path = await process_audio_chunk(audio_bytes)
-        text = transcribe_chunk(wav_path)
+        async with _transcribe_lock:
+            wav_path = await process_audio_chunk(audio_bytes)
+            text = await asyncio.to_thread(transcribe_chunk, wav_path)
         return {"text": text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if wav_path:
             cleanup_temp_file(wav_path)
-
-
 

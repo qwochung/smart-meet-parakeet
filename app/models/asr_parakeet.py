@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 from typing import List
 from loguru import logger
 
@@ -9,6 +10,15 @@ from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
 _model = None
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MODEL_PATH = PROJECT_ROOT / "data" / "nemo_models" / "parakeet-ctc-0.6b-vi.nemo"
+
+
+def _resolve_model_path() -> Path:
+    env_path = os.getenv("PARAKEET_MODEL_PATH")
+    if env_path:
+        return Path(env_path)
+    return DEFAULT_MODEL_PATH
 
 
 def load_model():
@@ -16,11 +26,15 @@ def load_model():
     if _model is None:
         logger.info("Loading Parakeet model...")
 
-        model_path = "data/nemo_models/parakeet-ctc-0.6b-vi.nemo"
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"File not found: {model_path}")
+        model_path = _resolve_model_path()
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Model not found: {model_path}. "
+                "Download parakeet-ctc-0.6b-vi.nemo into data/nemo_models/ "
+                "or set PARAKEET_MODEL_PATH."
+            )
 
-        _model = nemo_asr.models.EncDecCTCModelBPE.restore_from(model_path)
+        _model = nemo_asr.models.EncDecCTCModelBPE.restore_from(str(model_path))
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         _model = _model.to(device)
@@ -78,6 +92,22 @@ def _save_chunks(chunks: List[AudioSegment]) -> List[str]:
     return paths
 
 
+def _extract_text(result) -> str:
+    """NeMo mới trả về Hypothesis object thay vì str — lấy .text an toàn."""
+    if result is None:
+        return ""
+    if isinstance(result, (list, tuple)):
+        if not result:
+            return ""
+        return _extract_text(result[0])
+    if isinstance(result, str):
+        return result.strip()
+    text = getattr(result, "text", None)
+    if text is not None:
+        return str(text).strip()
+    return str(result).strip()
+
+
 def transcribe(file_path: str) -> str:
     audio = AudioSegment.from_file(file_path)
 
@@ -90,8 +120,9 @@ def transcribe(file_path: str) -> str:
 
         texts = []
         for r in raw_results:
-            if r is not None:
-                texts.append(r.strip())
+            text = _extract_text(r)
+            if text:
+                texts.append(text)
         return " ".join(texts)
     finally:
         for p in chunk_paths:
@@ -103,6 +134,6 @@ def transcribe_chunk(file_path: str) -> str:
     model = load_model()
     raw_results = model.transcribe([file_path])
 
-    if raw_results and raw_results[0] is not None:
-        return raw_results[0].strip()
-    return ""
+    if not raw_results:
+        return ""
+    return _extract_text(raw_results[0])
