@@ -108,22 +108,30 @@ def _extract_text(result) -> str:
     return str(result).strip()
 
 
-def transcribe(file_path: str) -> str:
+def prepare_chunk_paths(file_path: str) -> List[str]:
+    """Tách file audio thành các chunk wav tạm, trả về danh sách đường dẫn."""
     audio = AudioSegment.from_file(file_path)
-
     chunks = _split_audio(audio)
-    chunk_paths = _save_chunks(chunks)
+    return _save_chunks(chunks)
 
+
+def transcribe_batch(chunk_paths: List[str], batch_size: int = 2) -> List[str]:
+    """Transcribe một batch chunk. Caller chịu trách nhiệm giữ lock và dọn file."""
     model = load_model()
-    try:
-        raw_results = model.transcribe(chunk_paths, batch_size=2)
+    raw_results = model.transcribe(chunk_paths, batch_size=batch_size)
 
-        texts = []
-        for r in raw_results:
-            text = _extract_text(r)
-            if text:
-                texts.append(text)
-        return " ".join(texts)
+    texts = []
+    for r in raw_results:
+        text = _extract_text(r)
+        if text:
+            texts.append(text)
+    return texts
+
+
+def transcribe(file_path: str) -> str:
+    chunk_paths = prepare_chunk_paths(file_path)
+    try:
+        return " ".join(transcribe_batch(chunk_paths))
     finally:
         for p in chunk_paths:
             if os.path.exists(p):
